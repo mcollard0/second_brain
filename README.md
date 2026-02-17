@@ -24,3 +24,5 @@ Working title: ​The "Second Brain"
 ​The chain goes something like this: ASR (Automatic Speech Recognition.) It recognizes your speech and writes it down. You can then take that message to the AI provider of your choice as an input. I can say, "I'd like to write an article on LinkedIn," and it says, "Have you considered a career as a mime?"
 
 ​Then comes the part that really gives me the creeps: ElevenLabs will repeat the ideas that the AI comes up with for you—refinements, ideas, finding problems—saying it back to you in your own voice. In this way, you're literally talking to yourself, but finally, your brain is smarter than your brain.
+
+[Continue to ARCHITECTURE](https://github.com/mcollard0/second_brain/blob/main/ARCHITECTURE.md)
