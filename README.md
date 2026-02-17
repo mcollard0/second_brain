@@ -26,3 +26,9 @@ Working title: ​The "Second Brain"
 ​Then comes the part that really gives me the creeps: ElevenLabs will repeat the ideas that the AI comes up with for you—refinements, ideas, finding problems—saying it back to you in your own voice. In this way, you're literally talking to yourself, but finally, your brain is smarter than your brain.
 
 [Continue to ARCHITECTURE](https://github.com/mcollard0/second_brain/blob/main/ARCHITECTURE.md)
+
+### Product Demo
+
+https://github.com/user-attachments/assets/047a67b7-8c56-47d2-8701-da159585b891
+
+
