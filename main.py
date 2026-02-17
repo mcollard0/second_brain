@@ -15,9 +15,9 @@ load_dotenv()
 
 async def pipeline(asr, llm, tts, storage):
     """
-    Main pipeline: ASR -> LLM -> (TTS, Storage)
+    Main pipeline: Concurrent ASR -> LLM -> (TTS, Storage)
+    Allows listening while speaking.
     """
-    # System Prompt with JSON instruction
     # System Prompt with JSON instruction
     SYSTEM_PROMPT = """
 You are an idea refinement agent. Respond **only** in JSON.
@@ -33,73 +33,101 @@ Keep voice responses concise and conversational.
 """
 
     messages = []
-    active_filename = None
+    # Shared state for filename memory
+    state = {"active_filename": None}
     
-    while True:
-        try:
-            # 1. ASR
-            user_text = await asr.listen()
-            if not user_text:
-                continue # Listen again if nothing heard
+    # Queue for decoupled ASR -> LLM processing
+    input_queue = asyncio.Queue()
+
+    async def producer_asr():
+        """Continuously listens and pushes text to queue"""
+        print("[System] ASR Background Task Started")
+        while True:
+            # This yields control, allowing consumer to run
+            text = await asr.listen()
             
-            if user_text.lower() in ["exit", "quit", "stop"]:
+            if text:
+                print(f"[ASR Input]: {text}")
+                await input_queue.put(text)
+                
+                if text.lower() in ["exit", "quit", "stop"]:
+                    print("[ASR] Exit command received.")
+                    break
+
+    async def consumer_processing():
+        """Consumes text, generates response, and speaks"""
+        print("[System] Processing Task Started")
+        while True:
+            # Wait for input
+            text = await input_queue.get()
+            
+            if text.lower() in ["exit", "quit", "stop"]:
+                input_queue.task_done()
                 break
                 
-            print(f"User: {user_text}")
-            messages.append({"role": "user", "content": user_text})
+            # Add to history
+            messages.append({"role": "user", "content": text})
             
             # Dynamic System Prompt
             current_prompt = SYSTEM_PROMPT
-            if active_filename:
-                current_prompt += f"\n\nIMPORTANT: You MUST continue appending to the file: '{active_filename}'. Do NOT change the filename."
-            
-            # 2. LLM
-            print("Generating response...")
-            response_data = await llm.generate(current_prompt, messages)
-            
-            # 3. Process Response
-            voice_output = response_data.get("voice_output", {})
-            data_mgmt = response_data.get("data_management", {})
-            
-            # Add assistant message to history (using the voice text as content representation for history context?)
-            # Ideally we store the structured interaction, but for simple chat history, text is fine.
-            assistant_text = voice_output.get("text", "")
-            messages.append({"role": "assistant", "content": assistant_text})
-            
-            # 4. Storage (Parallel if possible, but small writes are fast)
-            if data_mgmt.get("will_capture"):
-                payload = data_mgmt.get("capture_payload", {})
-                
-                proposed_filename = payload.get("filename")
-                content = payload.get("content")
-                
-                if content:
-                    if active_filename:
-                        filename = active_filename
-                    elif proposed_filename:
-                        active_filename = proposed_filename
-                        filename = proposed_filename
-                    else:
-                        filename = None
+            if state["active_filename"]:
+                 current_prompt += f"\n\nIMPORTANT: You MUST continue appending to the file: '{state['active_filename']}'. Do NOT change the filename."
 
-                    if filename:
-                        asyncio.create_task(storage.save(filename, content))
-            
-            # 5. TTS (Blocking/Streaming)
-            if assistant_text:
-                print(f"AI: {assistant_text}")
-                await tts.speak(assistant_text)
+            print(f"[LLM] Thinking...")
+            try:
+                response_data = await llm.generate(current_prompt, messages)
                 
-        except KeyboardInterrupt:
-            break
-        except Exception as e:
-            print(f"An error occurred in pipeline: {e}")
-            await asyncio.sleep(1)
+                voice_output = response_data.get("voice_output", {})
+                data_mgmt = response_data.get("data_management", {})
+                
+                assistant_text = voice_output.get("text", "")
+                messages.append({"role": "assistant", "content": assistant_text})
+                
+                # Handle Data Capture
+                if data_mgmt.get("will_capture"):
+                    payload = data_mgmt.get("capture_payload", {})
+                    
+                    proposed_filename = payload.get("filename")
+                    content = payload.get("content")
+                    
+                    if content:
+                        if state["active_filename"]:
+                            filename = state["active_filename"]
+                        elif proposed_filename:
+                            state["active_filename"] = proposed_filename
+                            filename = proposed_filename
+                        else:
+                            filename = None
+                            
+                        if filename:
+                            print(f"[STORAGE] Saving to {filename}...")
+                            asyncio.create_task(storage.save(filename, content))
+                
+                # TTS
+                if assistant_text:
+                    print(f"AI: {assistant_text}")
+                    # We await here, but producer_asr continues running!
+                    await tts.speak(assistant_text)
+                    
+            except Exception as e:
+                print(f"[Error] Processing failed: {e}")
+            finally:
+                input_queue.task_done()
 
+    # Run both tasks concurrently
+    producer = asyncio.create_task(producer_asr())
+    consumer = asyncio.create_task(consumer_processing())
+    
+    # Wait for them to finish (they finish when 'exit' is spoken)
+    await asyncio.gather(producer, consumer)
 def main():
     parser = argparse.ArgumentParser(description="Second Brain Voice Assistant")
     parser.add_argument("--provider", choices=["gemini", "anthropic", "openai"], default="gemini", help="LLM Provider")
     parser.add_argument("--model", type=str, help="Specific model name")
+    parser.add_argument("--voice-id", type=str, help="ElevenLabs Voice ID")
+    parser.add_argument("--audio-output-index", type=int, help="Audio Output Device Index")
+    parser.add_argument("--audio-channels", type=int, help="Audio Channels (1 or 2)")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging and audio dump")
     
     args = parser.parse_args()
     
@@ -113,7 +141,7 @@ def main():
         llm = OpenAIProvider(model_name=args.model if args.model else "gpt-4-turbo-preview")
         
     asr = ASR()
-    tts = TTS()
+    tts = TTS(voice_id=args.voice_id, device_index=args.audio_output_index, channels=args.audio_channels, debug=args.debug)
     storage = Storage(base_path="brain")
     
     print(f"Starting Second Brain with {args.provider}...")
