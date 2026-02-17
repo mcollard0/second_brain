@@ -93,6 +93,7 @@ async def test_continuous_loop(provider="gemini"):
     storage = Storage(base_path="brain")
     
     history = []
+    active_filename = None # Memory for filename
     
     try:
         while True:
@@ -109,23 +110,39 @@ async def test_continuous_loop(provider="gemini"):
                 
             history.append({"role": "user", "content": text})
             
+            # Dynamic System Prompt to enforce filename
+            current_prompt = SYSTEM_PROMPT
+            if active_filename:
+                current_prompt += f"\n\nIMPORTANT: You MUST continue appending to the file: '{active_filename}'. Do NOT change the filename."
+            
             # LLM
             print("Thinking...")
-            response = await llm.generate(SYSTEM_PROMPT, history)
+            response = await llm.generate(current_prompt, history)
             voice_text = response.get("voice_output", {}).get("text", "")
             
-            # Helper to print full JSON for debug if needed
-            # print(f"Full Response: {json.dumps(response, indent=2)}")
-
             # Handle Data Capture
             data_mgmt = response.get("data_management", {})
             if data_mgmt.get("will_capture"):
                 payload = data_mgmt.get("capture_payload", {})
-                filename = payload.get("filename")
+                
+                # Logic: If active_filename is set, FORCE it. If not, set it from payload.
+                proposed_filename = payload.get("filename")
                 content = payload.get("content")
-                if filename and content:
-                    print(f"[STORAGE] Saving to {filename}...")
-                    await storage.save(filename, content)
+                
+                if content:
+                    if active_filename:
+                        # Override LLM's filename with our strict memory
+                        filename = active_filename
+                    elif proposed_filename:
+                        # First time setting it
+                        active_filename = proposed_filename
+                        filename = active_filename
+                    else:
+                        filename = None
+
+                    if filename:
+                        print(f"[STORAGE] Saving to {filename}...")
+                        await storage.save(filename, content)
             
             # Update history
             history.append({"role": "model", "content": voice_text}) 
@@ -157,6 +174,10 @@ async def test_concurrent_loop(provider="gemini"):
     
     history = []
     
+    # Shared state for filename memory (needs to be mutable or object to access in closure if needed, but here simple local var in outer scope works if passed/accessed correctly)
+    # Actually, needs to be in consumer scope or shared dict
+    state = {"active_filename": None}
+    
     async def producer_asr():
         """Continuously listens and pushes text to queue"""
         print("[System] ASR Background Task Started")
@@ -186,20 +207,36 @@ async def test_concurrent_loop(provider="gemini"):
             # Add to history
             history.append({"role": "user", "content": text})
             
+            # Dynamic System Prompt
+            current_prompt = SYSTEM_PROMPT
+            if state["active_filename"]:
+                 current_prompt += f"\n\nIMPORTANT: You MUST continue appending to the file: '{state['active_filename']}'. Do NOT change the filename."
+
             print(f"[LLM] Thinking...")
             try:
-                response = await llm.generate(SYSTEM_PROMPT, history)
+                response = await llm.generate(current_prompt, history)
                 voice_text = response.get("voice_output", {}).get("text", "")
                 
                 # Handle Data Capture
                 data_mgmt = response.get("data_management", {})
                 if data_mgmt.get("will_capture"):
                     payload = data_mgmt.get("capture_payload", {})
-                    filename = payload.get("filename")
+                    
+                    proposed_filename = payload.get("filename")
                     content = payload.get("content")
-                    if filename and content:
-                        print(f"[STORAGE] Saving to {filename}...")
-                        asyncio.create_task(storage.save(filename, content))
+                    
+                    if content:
+                        if state["active_filename"]:
+                            filename = state["active_filename"]
+                        elif proposed_filename:
+                            state["active_filename"] = proposed_filename
+                            filename = proposed_filename
+                        else:
+                            filename = None
+                            
+                        if filename:
+                            print(f"[STORAGE] Saving to {filename}...")
+                            asyncio.create_task(storage.save(filename, content))
                 
                 # Update history
                 history.append({"role": "model", "content": voice_text})

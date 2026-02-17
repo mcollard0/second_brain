@@ -12,9 +12,9 @@ class TTS:
         if not self.api_key:
             raise ValueError("ELEVENLABS_API_KEY not found in environment variables.")
         
-        # Use provided voice_id, or env var, or default to LjNqOSdRGIUUmAcEINh7
+        # Use provided voice_id, or env var, or default to dyLJ4nCukg4AOgAVlUR7
         if voice_id is None:
-            self.voice_id = os.getenv("ELEVENLABS_VOICE_ID", "LjNqOSdRGIUUmAcEINh7")
+            self.voice_id = os.getenv("ELEVENLABS_VOICE_ID", "dyLJ4nCukg4AOgAVlUR7")
         else:
             self.voice_id = voice_id
 

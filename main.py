@@ -18,19 +18,22 @@ async def pipeline(asr, llm, tts, storage):
     Main pipeline: ASR -> LLM -> (TTS, Storage)
     """
     # System Prompt with JSON instruction
+    # System Prompt with JSON instruction
     SYSTEM_PROMPT = """
 You are an idea refinement agent. Respond **only** in JSON.
 
-If an idea is worth saving, include a `data_management` object with a `filename` and `content` in Markdown.
+Format: `{"voice_output": {"text": "..."}, "data_management": {"will_capture": true, "capture_payload": {"filename": "ideas.md", "content": "## Idea\n..."}}}`
 
-**Rules:**
+**Data Capture Rules:**
+1.  If an idea is worth saving, include a `data_management` object.
+2.  **Memory**: You must remember the filename you used previously for a topic. Do not change it unless the user explicitly asks to start a new file.
+3.  **Content**: Append new details. Do not repeat previously saved details unless they have changed.
 
-1. Keep `voice_output` conversational (no markdown tags here).
-2. Once a `filename` is chosen for a session, you must use that same filename for all subsequent appends in that thread (unless capturing a distinctly new idea).
-3. Use the format: `{"voice_output": {"text": "..."}, "data_management": {"will_capture": true, "capture_payload": {...}}}`
-    """
+Keep voice responses concise and conversational.
+"""
 
     messages = []
+    active_filename = None
     
     while True:
         try:
@@ -45,9 +48,14 @@ If an idea is worth saving, include a `data_management` object with a `filename`
             print(f"User: {user_text}")
             messages.append({"role": "user", "content": user_text})
             
+            # Dynamic System Prompt
+            current_prompt = SYSTEM_PROMPT
+            if active_filename:
+                current_prompt += f"\n\nIMPORTANT: You MUST continue appending to the file: '{active_filename}'. Do NOT change the filename."
+            
             # 2. LLM
             print("Generating response...")
-            response_data = await llm.generate(SYSTEM_PROMPT, messages)
+            response_data = await llm.generate(current_prompt, messages)
             
             # 3. Process Response
             voice_output = response_data.get("voice_output", {})
@@ -61,10 +69,21 @@ If an idea is worth saving, include a `data_management` object with a `filename`
             # 4. Storage (Parallel if possible, but small writes are fast)
             if data_mgmt.get("will_capture"):
                 payload = data_mgmt.get("capture_payload", {})
-                filename = payload.get("filename")
+                
+                proposed_filename = payload.get("filename")
                 content = payload.get("content")
-                if filename and content:
-                    asyncio.create_task(storage.save(filename, content))
+                
+                if content:
+                    if active_filename:
+                        filename = active_filename
+                    elif proposed_filename:
+                        active_filename = proposed_filename
+                        filename = proposed_filename
+                    else:
+                        filename = None
+
+                    if filename:
+                        asyncio.create_task(storage.save(filename, content))
             
             # 5. TTS (Blocking/Streaming)
             if assistant_text:
@@ -86,7 +105,8 @@ def main():
     
     # Initialize Provider
     if args.provider == "gemini":
-        llm = GeminiProvider(model_name=args.model if args.model else "gemini-1.5-pro-latest")
+        # Updated default to Flash (faster/cheaper)
+        llm = GeminiProvider(model_name=args.model if args.model else "gemini-3-flash-preview")
     elif args.provider == "anthropic":
         llm = AnthropicProvider(model_name=args.model if args.model else "claude-3-opus-20240229")
     elif args.provider == "openai":
@@ -94,7 +114,7 @@ def main():
         
     asr = ASR()
     tts = TTS()
-    storage = Storage()
+    storage = Storage(base_path="brain")
     
     print(f"Starting Second Brain with {args.provider}...")
     try:
