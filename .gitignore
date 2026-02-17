@@ -1,4 +1,5 @@
-venv
+backup/
+venv/
 .git
 __pycache__/
 *.pyc
