@@ -1,0 +1,22 @@
+# Second Brain Implementation Tasks
+
+- [ ] Project Setup
+    - [ ] Create project structure (directories, virtualenv setup instructions) <!-- id: 0 -->
+    - [ ] Create `requirements.txt` <!-- id: 1 -->
+    - [ ] Create `.env.example` <!-- id: 2 -->
+- [ ] Core Components Implementation
+    - [ ] Implement ASR (Speech to Text) Module <!-- id: 3 -->
+    - [ ] Implement LLM Interface (Base Class) <!-- id: 4 -->
+    - [ ] Implement Gemini Provider (Default) <!-- id: 12 -->
+    - [ ] Implement Anthropic Provider <!-- id: 13 -->
+    - [ ] Implement OpenAI Provider <!-- id: 14 -->
+    - [ ] Implement CLI Argument Parsing (Provider & Model selection) <!-- id: 15 -->
+    - [ ] Implement ElevenLabs TTS Streaming Module <!-- id: 5 -->
+    - [ ] Implement Data Management (Disk IO) Module <!-- id: 6 -->
+    - [ ] Implement Queue Management (Orchestrator) <!-- id: 7 -->
+- [ ] Main Application Loop
+    - [ ] Integrate all components into `main.py` <!-- id: 8 -->
+- [ ] Verification & Testing
+    - [ ] Test 1: Mic Voice Input -> Text <!-- id: 9 -->
+    - [ ] Test 2: Mic -> AI -> JSON Response <!-- id: 10 -->
+    - [ ] Test 3: Mic -> AI -> Audio Output <!-- id: 11 -->
