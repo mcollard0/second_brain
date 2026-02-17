@@ -1,0 +1,8 @@
+SpeechRecognition
+pyaudio
+websockets
+aiofiles
+google-genai
+anthropic
+openai
+python-dotenv
