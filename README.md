@@ -1,10 +1,3 @@
-README.md  
-
-Michael CollardMichael Collard
-   • You Verified • You
-I fix problems. You have to know people like that.I fix problems. You have to know people like that.
-4m • Edited •  4 minutes ago • Edited • Visible to anyone on or off LinkedIn
-
 Working title: ​The "Second Brain"
 
 ​I was talking with a family member today and he has been stuck in the same patterns. Not that I am perfect in any shape, form, or fashion—I'm still eating that pizza from three days ago. But he's been stuck in the same patterns, and there has to be something more to life.
