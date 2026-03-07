@@ -25,32 +25,48 @@ class TTS:
         # Audio setup
         self.p = pyaudio.PyAudio()
         
-        # Device Index: Arg > Env > Default(21)
+        # Device Index: Arg > Env > Default(None = system default)
         if device_index is not None:
-             self.device_index = device_index
+            self.device_index = device_index
         else:
-            try:
-                self.device_index = int(os.getenv("AUDIO_OUTPUT_INDEX", "21"))
-            except ValueError:
-                self.device_index = 21
+            env_val = os.getenv( "AUDIO_OUTPUT_INDEX" )
+            if env_val:
+                try:
+                    self.device_index = int( env_val )
+                except ValueError:
+                    self.device_index = None
+            else:
+                self.device_index = None
 
         # Channels: Arg > Env > Default(2)
         if channels is not None:
             self.channels = channels
         else:
             try:
-                self.channels = int(os.getenv("AUDIO_CHANNELS", "2"))
+                self.channels = int( os.getenv( "AUDIO_CHANNELS", "2" ) )
             except ValueError:
                 self.channels = 2
 
         if self.debug:
-            print(f"[TTS CHECK] Voice: {self.voice_id}, Device: {self.device_index}, Channels: {self.channels}")
+            print( f"[TTS CHECK] Voice: {self.voice_id}, Device: {self.device_index}, Channels: {self.channels}" )
 
-        self.stream = self.p.open(format=pyaudio.paInt16,
-                                  channels=self.channels,
-                                  rate=24000,
-                                  output=True,
-                                  output_device_index=self.device_index)
+        try:
+            self.stream = self.p.open( format=pyaudio.paInt16,
+                                       channels=self.channels,
+                                       rate=24000,
+                                       output=True,
+                                       output_device_index=self.device_index )
+        except OSError as e:
+            if self.device_index is not None:
+                print( f"[TTS] Device {self.device_index} failed ({e}), falling back to system default." )
+                self.device_index = None
+                self.stream = self.p.open( format=pyaudio.paInt16,
+                                           channels=self.channels,
+                                           rate=24000,
+                                           output=True,
+                                           output_device_index=None )
+            else:
+                raise
         
         self.debug_file = "/tmp/elevenlabs_debug.pcm"
         # Clear debug file on init if debug is enabled
@@ -145,20 +161,21 @@ class TTS:
             yield text
         
         # Re-implement logic with headers correct for the connection
-        async with websockets.connect(self.uri, additional_headers={"xi-api-key": self.api_key}) as websocket:
-            # Initial config
-            init_payload = {
+        async with websockets.connect( self.uri, additional_headers={"xi-api-key": self.api_key} ) as websocket:
+            # BOS: ElevenLabs requires "text": " " (space) as the beginning-of-stream marker
+            bos_payload = {
+                "text": " ",
                 "voice_settings": {"stability": 0.5, "similarity_boost": 0.75}
             }
             if self.debug:
-                print(f"[TTS DEBUG] Sending Init: {init_payload}")
-            await websocket.send(json.dumps(init_payload))
+                print( f"[TTS DEBUG] Sending BOS: {bos_payload}" )
+            await websocket.send( json.dumps( bos_payload ) )
 
             # Send text
             if self.debug:
-                print(f"[TTS DEBUG] Sending Text: '{text}'")
-            await websocket.send(json.dumps({"text": text, "try_trigger_generation": True}))
-            await websocket.send(json.dumps({"text": ""})) # EOS
+                print( f"[TTS DEBUG] Sending Text: '{text}'" )
+            await websocket.send( json.dumps( {"text": text + " ", "try_trigger_generation": True} ) )
+            await websocket.send( json.dumps( {"text": ""} ) ) # EOS
 
             while True:
                 try:

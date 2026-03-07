@@ -26,7 +26,7 @@ Format: `{"voice_output": {"text": "..."}, "data_management": {"will_capture": t
 
 **Data Capture Rules:**
 1.  If an idea is worth saving, include a `data_management` object.
-2.  **Memory**: You must remember the filename you used previously for a topic. Do not change it unless the user explicitly asks to start a new file.
+2.  **Filename**: Once a filename is chosen for a topic, it is LOCKED. Always reuse the exact same filename. Never propose a new one for existing content.
 3.  **Content**: Append new details. Do not repeat previously saved details unless they have changed.
 
 Keep voice responses concise and conversational.
@@ -71,7 +71,7 @@ Keep voice responses concise and conversational.
             # Dynamic System Prompt
             current_prompt = SYSTEM_PROMPT
             if state["active_filename"]:
-                 current_prompt += f"\n\nIMPORTANT: You MUST continue appending to the file: '{state['active_filename']}'. Do NOT change the filename."
+                current_prompt += f"\n\nFILENAME LOCKED: The active file is '{state['active_filename']}'. You MUST use this exact filename. Any other filename you propose will be ignored."
 
             print(f"[LLM] Thinking...")
             try:
@@ -92,16 +92,19 @@ Keep voice responses concise and conversational.
                     
                     if content:
                         if state["active_filename"]:
+                            if proposed_filename and proposed_filename != state["active_filename"]:
+                                print( f"[STORAGE] Ignoring proposed '{proposed_filename}', locked to '{state['active_filename']}'" )
                             filename = state["active_filename"]
                         elif proposed_filename:
                             state["active_filename"] = proposed_filename
                             filename = proposed_filename
+                            print( f"[STORAGE] Filename locked: '{filename}'" )
                         else:
                             filename = None
-                            
+
                         if filename:
-                            print(f"[STORAGE] Saving to {filename}...")
-                            asyncio.create_task(storage.save(filename, content))
+                            print( f"[STORAGE] Saving to {filename}..." )
+                            asyncio.create_task( storage.save( filename, content ) )
                 
                 # TTS
                 if assistant_text:
